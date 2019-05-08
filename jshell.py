@@ -1,5 +1,6 @@
 from time import sleep
 from base64 import b64encode
+from helpers import random_string, mkdir
 import os
 import string
 import random
@@ -18,15 +19,6 @@ class JShell:
     jshell_process = None
 
     def __init__(self):
-        def random_string(n):
-            return ''.join(random.choices(string.ascii_uppercase + string.digits, k=n))
-
-        def mkdir(path):
-            try:
-                os.makedirs(path)
-            except OSError as exc:
-                pass
-
         mkdir("snippets")
         mkdir("fifos")
 
