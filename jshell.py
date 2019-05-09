@@ -77,6 +77,10 @@ class JShell:
                 pass
 
 
+    def reset():
+        self.run("/reset")
+
+
     def write(self, string_):
         with open(self.in_path, 'w') as java_in:
             java_in.write(string_)
