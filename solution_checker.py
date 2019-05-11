@@ -4,7 +4,9 @@ from queue import Empty
 from threading import Thread
 from error import Error
 import multiprocessing
+import json
 
+# HERE: Check class by writing the solution to the test cases in 2004/1/a and use check_solution to see if it works correctly
 class LoadingFailure(Exception):
     def __init__(self, message, errors):
         super().__init__(message)
@@ -70,7 +72,7 @@ class SolutionChecker:
         # any additional errors.
         errors = jshell.run("new " + class_name + "()")
 
-        if loaded_snippets_before == loaded_snippets_after or not errors
+        if loaded_snippets_before == loaded_snippets_after or not errors:
             raise LoadingFailure(f"Failed to load {snippet_URL}")
 
     # Returns the first error produced by javac when 
@@ -78,7 +80,7 @@ class SolutionChecker:
     # This method is only called after a snippet is unable
     # to be loaded into the JShell env and therefore
     # must contain an error.
-    def get_compile_error(snippet_URL):
+    def get_compile_error(self, snippet_URL):
         p = subprocess(["javac", snippet_URL], stdout=subprocess.PIPE)
         error_text = p.stdout.read()
         error = Error()
@@ -101,7 +103,7 @@ class SolutionChecker:
     # Returns the first error found while running test cases
     # (an actual error thrown by the code or a failed test
     # case), else returns None.
-    def run_test_cases(test_cases_URL):
+    def run_test_cases(self, test_cases_URL):
         test_cases = None
         with open(test_cases_URL) as test_cases_json:
             test_cases = json.load(test_cases_json)
@@ -116,8 +118,8 @@ class SolutionChecker:
                 run_line.start()
 
                 try:
-                    o = q.get(timeout=3)
-                    error.add_history(line)
+                    o = q.get(timeout=100)
+                    error.history.append(line)
 
                     if self.setup_ended_key in line:
                         setup_ended = True
@@ -125,37 +127,40 @@ class SolutionChecker:
                     # get_first_error will return None
                     # if there is no error in the output,
                     # else, it will return the error.
-                    error_text = get_first_error(o)
+                    error_text = self.get_first_error(o)
 
-                else if setup_ended:
-                    correct_output = test_case["output"].pop(0)
+                    # If there is already an error thrown
+                    # by the user's code, there is not point
+                    # in checking if the code's output
+                    # is correct.
+                    if setup_ended and not error_text:
+                        correct_output = test_case["output"].pop(0)
 
-                    if correct_output != o:
-                        error.correct_output = correct_output
-                    else:
-                        error.history.append(o)
+                        if correct_output != o:
+                            error.correct_output = correct_output
+                        else:
+                            error.history.append(o)
                     
-                if error.text or error.correct_output:
+                    if error.text or error.correct_output:
+                        return error
+
+                except Empty:
+                    error = Error()
+                    error.text = "Timeout error"
+                    self.nonblocking_restart()
                     return error
-
-            except Empty:
-                error = Error()
-                error.text = "Timeout error"
-                nonblocking_restart()
-                return error
-
         return None
 
     # Create a new JShell instance without blocking the
     # calling thread. This is necessary to not block the
     # server should a JShell instance get stuck on some code.
-    def nonblocking_restart():
-        jshell.kill()
-        restart_thread = Thread(target=restart)
+    def nonblocking_restart(self):
+        self.jshell.kill()
+        restart_thread = Thread(target=self.restart)
         restart_thread.start()
 
     # Returns the first error found in output, else [].
-    def get_first_error(output):
+    def get_first_error(self, output):
         error_text = []
         error_start = False
         for line in output:
@@ -166,3 +171,5 @@ class SolutionChecker:
                 error_text.append(line)
 
         return error_text
+
+SolutionChecker().run_test_cases('/home/filip/image/2004/1/a/test_cases.json')
