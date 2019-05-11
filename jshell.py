@@ -23,10 +23,9 @@ class JShell:
             os.killpg(os.getpgid(jshell_process.pid), signal.SIGTERM)
             os.killpg(os.getpgid(dummy_input_process.pid), signal.SIGTERM)
 
-            print("removing fifos in exit")
             for f in [in_path, out_path, snippet_path]:
                 try:
-                    # os.remove(f)
+                    os.remove(f)
                     pass
                 except FileNotFoundError:
                     pass
@@ -50,7 +49,7 @@ class JShell:
                 pass
 
         dummy_input_process = subprocess.Popen(f"(while true; do sleep 86400; done) > {in_path}", shell=True, preexec_fn=os.setsid)
-        jshell_process = subprocess.Popen(f"jshell < {in_path} | tee -a fifos/log_{self.EOF_key}", shell=True, preexec_fn=os.setsid, stdout=subprocess.PIPE)
+        jshell_process = subprocess.Popen(f"jshell < {in_path} | tee -a fifos/log_{self.EOF_key}", shell=True, preexec_fn=os.setsid, universal_newlines=True, stdout=subprocess.PIPE)
 
 
         # This is needed so that exit() can refer to both
@@ -63,28 +62,13 @@ class JShell:
         self.out_path = out_path
         self.snippet_path = snippet_path
 
-        with open(self.out_path) as java_out:
-            java_out.read(89)
-
-        # This breaks the JShell class
-        # sleep(0.4)
-
-        # Either one of these break the JShell class
-        # self.run('/set feedback concise', blocking=True)
-        # self.run('System.out.println("something");', blocking=True)
-
-        # This causes the JShell class to work
-        # sleep(1)
-
-        # Without anything here, the JShell class
-        # sometimes hangs on "ONE"
+        self.jshell_process.stdout.read(89)
 
 
     def kill(self):
         os.killpg(os.getpgid(self.jshell_process.pid), signal.SIGTERM)
         os.killpg(os.getpgid(self.dummy_input_process.pid), signal.SIGTERM)
 
-        print("removing fifos in kill")
         for f in [self.in_path, self.out_path, self.snippet_path]:
             try:
                 os.remove(f)
@@ -102,12 +86,7 @@ class JShell:
 
 
     def read(self, num_bytes):
-        r = None
-        print("opening...")
-        with open(self.out_path) as java_out:
-            print("opened!")
-            r = java_out.read(num_bytes)
-        return r
+        return self.jshell_process.stdout.read(num_bytes)
 
 
     def flush(self):
@@ -121,26 +100,20 @@ class JShell:
 
         num_bytes = len(code.encode('utf-8'))
 
-
-        
         self.write(code)
-        print("ONE")
-        print("RESULT IS", self.read(num_bytes))
-        print("TWO")
+        self.read(num_bytes)
         self.flush()
 
         output = []
         x = 0
-        with open(self.out_path) as java_out:
-            for i, line in enumerate(java_out):
-                if self.EOF_key in line:
-                    break
-                elif i:
-                    output.append(line)
-                    x += len(line)
+        for i, line in enumerate(self.jshell_process.stdout):
+            if self.EOF_key in line:
+                break
+            elif i:
+                output.append(line)
+                x += len(line)
 
         if not blocking:
-            # q.put(output)
-            pass
+            q.put(output)
         else:
             return output
